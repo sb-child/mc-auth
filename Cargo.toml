@@ -1,0 +1,27 @@
+[package]
+name = "mc-auth"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "*", features = ["full"] }
+tower = "*"
+tracing = "*"
+tracing-subscriber = { version = "*", features = [
+    "env-filter",
+] }
+axum = { version = "*", features = ["tracing"] }
+serde = { version = "*", features = ["derive"] }
+prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10" }
+prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10" }
+anyhow = "*"
+tower-http = { version = "*", features = ["trace"] }
+
+[profile.release]
+opt-level = "z"
+debug = false
+lto = true
+panic = "abort"
+codegen-units = 1

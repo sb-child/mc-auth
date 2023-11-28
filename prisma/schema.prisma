@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "cargo prisma"
+  output   = "../src/prisma.rs"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UploadableTextures {
+  SkinOnly
+  SkinAndCape
+  None
+}
+
+enum SkinType {
+  Default
+  Slim
+}
+
+enum Language {
+  ZH_CN
+  EN
+}
+
+enum TokenStatus {
+  Available
+  NeedRefresh
+  Invalid
+}
+
+model Skin {
+  id        BigInt    @id @unique @default(autoincrement())
+  hash      Bytes
+  model     SkinType
+  createdAt DateTime  @default(now())
+  Profile   Profile[]
+}
+
+model Cape {
+  id        BigInt    @id @unique @default(autoincrement())
+  hash      Bytes
+  createdAt DateTime  @default(now())
+  Profile   Profile[]
+}
+
+model Profile {
+  id                 BigInt             @id @unique @default(autoincrement())
+  uuid               Bytes              @unique
+  owner              User               @relation(fields: [ownerID], references: [id])
+  ownerID            BigInt
+  displayName        String             @unique
+  skin               Skin?              @relation(fields: [skinID], references: [id])
+  skinID             BigInt?
+  cape               Cape?              @relation(fields: [capeID], references: [id])
+  capeID             BigInt?
+  uploadableTextures UploadableTextures @default(SkinAndCape)
+  createdAt          DateTime           @default(now())
+  Token              Token[]
+}
+
+model User {
+  id        BigInt    @id @unique @default(autoincrement())
+  uuid      Bytes     @unique
+  nickname  String
+  email     String    @unique
+  password  String
+  language  Language  @default(ZH_CN)
+  createdAt DateTime  @default(now())
+  Profile   Profile[]
+  Token     Token[]
+  Setting   Setting?
+}
+
+model Token {
+  id          BigInt        @id @unique @default(autoincrement())
+  accessToken String        @unique
+  clientToken String
+  owner       User          @relation(fields: [ownerID], references: [id])
+  ownerID     BigInt
+  profile     Profile?      @relation(fields: [profileID], references: [id])
+  profileID   BigInt?
+  status      TokenStatus   @default(Available)
+  createdAt   DateTime      @default(now())
+  JoinRequest JoinRequest[]
+}
+
+model JoinRequest {
+  id          BigInt   @id @unique @default(autoincrement())
+  serverID    String   @unique
+  token       Token    @relation(fields: [accessToken], references: [accessToken])
+  accessToken String
+  ip          String
+  createdAt   DateTime @default(now())
+}
+
+model Setting {
+  id       Int    @id @unique @default(autoincrement())
+  user     User   @relation(fields: [userId], references: [id])
+  userId   BigInt @unique
+  maxToken BigInt @default(10)
+}
