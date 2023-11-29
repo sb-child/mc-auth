@@ -58,3 +58,13 @@ pub mod login_resp {
     pub user: Option<User>,
   }
 }
+
+#[derive(thiserror::Error, Debug)]
+pub enum LoginTransactionError {
+  #[error("数据库错误: {0}")]
+  QueryError(#[from] prisma_client_rust::QueryError),
+  #[error("用户不存在")]
+  InvalidUser,
+  #[error("密码不正确")]
+  WrongPassword,
+}

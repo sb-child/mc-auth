@@ -4,7 +4,7 @@ use axum::{extract::State, routing, Json, Router};
 use mc_auth::{
   app_state::AppState,
   models::{
-    login::{login_req, login_resp},
+    login::{login_req, login_resp, LoginTransactionError},
     meta::meta_resp,
   },
   prisma,
@@ -41,6 +41,21 @@ async fn main() -> anyhow::Result<()> {
     },
   };
 
+  // db.user().create(
+  //   vec![0, 1, 2, 3, 4, 5, 6, 7, 8],
+  //   "sbchild".to_owned(),
+  //   "sbchild0@gmail.com".to_owned(),
+  //   "password".to_owned(),
+  //   vec![],
+  // ).exec().await?;
+
+  // db.profile().create(
+  //   vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+  //   prisma::user::email::equals("sbchild0@gmail.com".to_owned()),
+  //   "sb-child".to_owned(),
+  //   vec![],
+  // ).exec().await?;
+
   let state = AppState { db: Arc::new(db) };
 
   let app = Router::new()
@@ -74,6 +89,49 @@ async fn index(State(state): State<AppState>) -> Json<meta_resp::GetMetadataResp
 
 async fn login(State(state): State<AppState>, req: Json<login_req::LoginReq>) -> Json<login_resp::LoginResp> {
   tracing::info!("{:?}", state.db);
+  let user: Result<mc_auth::prisma::user::Data, LoginTransactionError> = state
+    .db
+    ._transaction()
+    .run(|cli| {
+      let req = req.clone();
+      async move {
+        // 根据邮箱匹配用户
+        let user_match_email = cli
+          .user()
+          .find_first(vec![
+            prisma::user::email::equals(req.username.clone()),
+            prisma::user::password::equals(req.password.clone()),
+          ])
+          .exec()
+          .await?;
+        if let Some(user) = user_match_email {
+          return Ok(user);
+        }
+        // 根据游戏内名称匹配用户
+        let user_match_displayname = cli
+          .user()
+          .find_first(vec![
+            prisma::user::profile::some(vec![prisma::profile::display_name::equals(req.username.clone())]),
+            prisma::user::password::equals(req.password.clone()),
+          ])
+          .exec()
+          .await?;
+        if let Some(user) = user_match_displayname {
+          return Ok(user);
+        }
+        // 如果找不到用户, 则返回错误
+        Err(LoginTransactionError::InvalidUser)
+      }
+    })
+    .await;
+  match user {
+    Ok(v) => {
+      tracing::info!("匹配到用户 {}", v.id);
+    },
+    Err(e) => {
+      tracing::error!("登录失败: {:?}", e);
+    },
+  };
   tracing::info!("{:?}", req);
   Json(login_resp::LoginResp {
     access_token: "".to_owned(),

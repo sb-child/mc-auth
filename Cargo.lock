@@ -2027,6 +2027,7 @@ dependencies = [
  "prisma-client-rust",
  "prisma-client-rust-cli",
  "serde",
+ "thiserror",
  "tokio",
  "tower",
  "tower-http",
