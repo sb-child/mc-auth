@@ -14,8 +14,12 @@ tracing-subscriber = { version = "*", features = [
 ] }
 axum = { version = "*", features = ["tracing"] }
 serde = { version = "*", features = ["derive"] }
-prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10" }
-prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10" }
+prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10", features = [
+    "migrations",
+] }
+prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10", features = [
+    "migrations",
+] }
 anyhow = "*"
 tower-http = { version = "*", features = ["trace"] }
 

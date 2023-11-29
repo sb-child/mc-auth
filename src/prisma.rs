@@ -2,6 +2,10 @@
 
 pub static DATAMODEL_STR: &'static str = include_str!("/home/sbchild/mc-auth/prisma/schema.prisma");
 static DATABASE_STR: &'static str = "postgresql";
+use ::prisma_client_rust::migrations::include_dir;
+pub static MIGRATIONS_DIR: &::prisma_client_rust::migrations::include_dir::Dir = &::prisma_client_rust::migrations::include_dir::include_dir!(
+    "/home/sbchild/mc-auth/prisma/migrations"
+);
 pub async fn new_client() -> Result<PrismaClient, ::prisma_client_rust::NewClientError> {
     PrismaClient::_builder().build().await
 }
@@ -9224,6 +9228,33 @@ pub mod _prisma {
         }
         pub fn _transaction(&self) -> ::prisma_client_rust::TransactionBuilder<Self> {
             ::prisma_client_rust::TransactionBuilder::_new(self, &self.0)
+        }
+        pub async fn _migrate_deploy(
+            &self,
+        ) -> Result<(), ::prisma_client_rust::migrations::MigrateDeployError> {
+            let res = ::prisma_client_rust::migrations::migrate_deploy(
+                super::DATAMODEL_STR,
+                super::MIGRATIONS_DIR,
+                &self.0.url(),
+            )
+            .await;
+            ::prisma_client_rust::tokio::time::sleep(core::time::Duration::from_millis(1)).await;
+            res
+        }
+        pub async fn _migrate_resolve(
+            &self,
+            migration: &str,
+        ) -> Result<(), ::prisma_client_rust::migrations::MigrateResolveError> {
+            ::prisma_client_rust::migrations::migrate_resolve(
+                migration,
+                super::DATAMODEL_STR,
+                super::MIGRATIONS_DIR,
+                &self.0.url(),
+            )
+            .await
+        }
+        pub fn _db_push(&self) -> ::prisma_client_rust::migrations::DbPush {
+            ::prisma_client_rust::migrations::db_push(super::DATAMODEL_STR, &self.0.url())
         }
         pub fn skin(&self) -> super::skin::Actions {
             super::skin::Actions { client: &self.0 }
