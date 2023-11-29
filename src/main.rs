@@ -1,5 +1,8 @@
-use axum::{routing, Json, Router};
+use std::sync::Arc;
+
+use axum::{extract::State, routing, Json, Router};
 use mc_auth::{
+  app_state::AppState,
   models::{
     login::{login_req, login_resp},
     meta::meta_resp,
@@ -38,9 +41,12 @@ async fn main() -> anyhow::Result<()> {
     },
   };
 
+  let state = AppState { db: Arc::new(db) };
+
   let app = Router::new()
     .route("/", routing::get(index))
     .route("/authserver/authenticate", routing::post(login))
+    .with_state(state)
     .layer(TraceLayer::new_for_http());
 
   let listener = TcpListener::bind("127.0.0.1:2345").await.unwrap();
@@ -50,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn index() -> Json<meta_resp::GetMetadataResp> {
+async fn index(State(state): State<AppState>) -> Json<meta_resp::GetMetadataResp> {
   Json(meta_resp::GetMetadataResp {
     meta: meta_resp::Meta {
       server_name: "色麦块".to_owned(),
@@ -66,7 +72,8 @@ async fn index() -> Json<meta_resp::GetMetadataResp> {
   })
 }
 
-async fn login(req: Json<login_req::LoginReq>) -> Json<login_resp::LoginResp> {
+async fn login(State(state): State<AppState>, req: Json<login_req::LoginReq>) -> Json<login_resp::LoginResp> {
+  tracing::info!("{:?}", state.db);
   tracing::info!("{:?}", req);
   Json(login_resp::LoginResp {
     access_token: "".to_owned(),
