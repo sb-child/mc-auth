@@ -1,13 +1,13 @@
 pub mod meta_resp {
   use serde::{Deserialize, Serialize};
 
-  #[derive(Serialize, Deserialize)]
+  #[derive(Serialize, Deserialize, Debug, Clone)]
   pub struct MetaLinks {
     pub homepage: String,
     pub register: String,
   }
 
-  #[derive(Serialize, Deserialize)]
+  #[derive(Serialize, Deserialize, Debug, Clone)]
   pub struct Meta {
     #[serde(rename = "serverName")]
     pub server_name: String,
@@ -18,7 +18,7 @@ pub mod meta_resp {
     pub links: MetaLinks,
   }
 
-  #[derive(Serialize, Deserialize)]
+  #[derive(Serialize, Deserialize, Debug, Clone)]
   pub struct GetMetadataResp {
     pub meta: Meta,
     #[serde(rename = "skinDomains")]

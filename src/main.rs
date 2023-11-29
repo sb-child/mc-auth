@@ -1,5 +1,11 @@
 use axum::{routing, Json, Router};
-use mc_auth::{models::meta::meta_resp, prisma};
+use mc_auth::{
+  models::{
+    login::{login_req, login_resp},
+    meta::meta_resp,
+  },
+  prisma,
+};
 use prisma::PrismaClient;
 use prisma_client_rust::NewClientError;
 use tokio::net::TcpListener;
@@ -60,18 +66,13 @@ async fn index() -> Json<meta_resp::GetMetadataResp> {
   })
 }
 
-async fn login() -> Json<meta_resp::GetMetadataResp> {
-  Json(meta_resp::GetMetadataResp {
-    meta: meta_resp::Meta {
-      server_name: "色麦块".to_owned(),
-      implementation_name: "色麦块认证服务器".to_owned(),
-      implementation_version: "0.0.1".to_owned(),
-      links: meta_resp::MetaLinks {
-        homepage: "https://sbchild.top/".to_owned(),
-        register: "https://sbchild.top/".to_owned(),
-      },
-    },
-    skin_domains: vec!["sbchild.top".to_owned(), "*.sbchild.top".to_owned()],
-    signature_publickey: "".to_owned(),
+async fn login(req: Json<login_req::LoginReq>) -> Json<login_resp::LoginResp> {
+  tracing::info!("{:?}", req);
+  Json(login_resp::LoginResp {
+    access_token: "".to_owned(),
+    available_profiles: vec![],
+    client_token: "".to_owned(),
+    selected_profile: None,
+    user: None,
   })
 }
