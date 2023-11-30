@@ -6,8 +6,10 @@ use mc_auth::{
   models::{
     login::{login_req, login_resp, LoginTransactionError},
     meta::meta_resp,
+    profile,
   },
   prisma,
+  settings::Settings,
 };
 use prisma::PrismaClient;
 use prisma_client_rust::NewClientError;
@@ -18,9 +20,17 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+  // color_backtrace::install();
+  // better_panic::Settings::debug().most_recent_first(false).lineno_suffix(true).install();
+
   tracing_subscriber::registry().with(tracing_subscriber::fmt::layer()).with(LevelFilter::INFO).init();
 
   tracing::info!("色麦块认证服务器~");
+
+  let settings = config::Config::builder().add_source(config::File::with_name("Settings").required(false)).build()?;
+  let settings: Settings = settings.try_deserialize()?;
+  tracing::info!("配置: {:?}", settings);
+
   tracing::info!("正在连接数据库...");
   let db: Result<PrismaClient, NewClientError> = PrismaClient::_builder().build().await;
   let db = match db {
@@ -56,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
   //   vec![],
   // ).exec().await?;
 
-  let state = AppState { db: Arc::new(db) };
+  let state = AppState { db: Arc::new(db), settings };
 
   let app = Router::new()
     .route("/", routing::get(index))
@@ -74,50 +84,63 @@ async fn main() -> anyhow::Result<()> {
 async fn index(State(state): State<AppState>) -> Json<meta_resp::GetMetadataResp> {
   Json(meta_resp::GetMetadataResp {
     meta: meta_resp::Meta {
-      server_name: "色麦块".to_owned(),
-      implementation_name: "色麦块认证服务器".to_owned(),
-      implementation_version: "0.0.1".to_owned(),
+      server_name: state.settings.server_name,
+      implementation_name: state.settings.implementation_name,
+      implementation_version: state.settings.implementation_version,
       links: meta_resp::MetaLinks {
-        homepage: "https://sbchild.top/".to_owned(),
-        register: "https://sbchild.top/".to_owned(),
+        homepage: state.settings.homepage_link,
+        register: state.settings.register_link,
       },
     },
-    skin_domains: vec!["sbchild.top".to_owned(), "*.sbchild.top".to_owned()],
-    signature_publickey: "".to_owned(),
+    skin_domains: state.settings.skin_domains,
+    signature_publickey: state.settings.pubkey,
   })
 }
 
 async fn login(State(state): State<AppState>, req: Json<login_req::LoginReq>) -> Json<login_resp::LoginResp> {
   tracing::info!("{:?}", state.db);
-  let user: Result<mc_auth::prisma::user::Data, LoginTransactionError> = state
+  let user: Result<(Option<prisma::profile::Data>, prisma::user::Data), LoginTransactionError> = state
     .db
     ._transaction()
     .run(|cli| {
       let req = req.clone();
       async move {
-        // 根据邮箱匹配用户
-        let user_match_email = cli
-          .user()
-          .find_first(vec![
-            prisma::user::email::equals(req.username.clone()),
-            prisma::user::password::equals(req.password.clone()),
-          ])
-          .exec()
-          .await?;
-        if let Some(user) = user_match_email {
-          return Ok(user);
-        }
-        // 根据游戏内名称匹配用户
-        let user_match_displayname = cli
-          .user()
-          .find_first(vec![
-            prisma::user::profile::some(vec![prisma::profile::display_name::equals(req.username.clone())]),
-            prisma::user::password::equals(req.password.clone()),
-          ])
-          .exec()
-          .await?;
-        if let Some(user) = user_match_displayname {
-          return Ok(user);
+        let include_display_name = req.username.split_once(":");
+        match include_display_name {
+          Some((dn, email)) => {
+            // 根据 角色名+邮箱 匹配用户
+            let user_match_displayname = cli
+              .user()
+              .find_first(vec![
+                prisma::user::profile::some(vec![prisma::profile::display_name::equals(dn.to_string())]),
+                prisma::user::email::equals(email.to_string()),
+                prisma::user::password::equals(req.password.clone()),
+              ])
+              .exec()
+              .await?;
+            let profile = cli
+              .profile()
+              .find_unique(prisma::profile::UniqueWhereParam::DisplayNameEquals(dn.to_string()))
+              .exec()
+              .await?;
+            if let Some(user) = user_match_displayname {
+              return Ok((profile, user));
+            }
+          },
+          None => {
+            // 根据邮箱匹配用户
+            let user_match_email = cli
+              .user()
+              .find_first(vec![
+                prisma::user::email::equals(req.username.clone()),
+                prisma::user::password::equals(req.password.clone()),
+              ])
+              .exec()
+              .await?;
+            if let Some(user) = user_match_email {
+              return Ok((None, user));
+            }
+          },
         }
         // 如果找不到用户, 则返回错误
         Err(LoginTransactionError::InvalidUser)
@@ -126,7 +149,7 @@ async fn login(State(state): State<AppState>, req: Json<login_req::LoginReq>) ->
     .await;
   match user {
     Ok(v) => {
-      tracing::info!("匹配到用户 {}", v.id);
+      tracing::info!("匹配到用户 {:?}", v);
     },
     Err(e) => {
       tracing::error!("登录失败: {:?}", e);
@@ -134,10 +157,18 @@ async fn login(State(state): State<AppState>, req: Json<login_req::LoginReq>) ->
   };
   tracing::info!("{:?}", req);
   Json(login_resp::LoginResp {
-    access_token: "".to_owned(),
-    available_profiles: vec![],
-    client_token: "".to_owned(),
-    selected_profile: None,
+    access_token: "9aab59824b72408a9b1c2ab2493e3d8b".to_owned(),
+    available_profiles: vec![profile::Profile {
+      id: "67f0d17981804a03ad851dbd6bbd4eb8".to_owned(),
+      name: "涩妹妹".to_owned(),
+      properties: vec![],
+    }],
+    client_token: req.client_token.clone().unwrap(),
+    selected_profile: Some(profile::Profile {
+      id: "67f0d17981804a03ad851dbd6bbd4eb8".to_owned(),
+      name: "涩妹妹".to_owned(),
+      properties: vec![],
+    }),
     user: None,
   })
 }

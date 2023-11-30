@@ -32,13 +32,7 @@ pub mod login_req {
 pub mod login_resp {
   use serde::{Deserialize, Serialize};
 
-  // todo
-  #[derive(Serialize, Deserialize, Debug, Clone)]
-  pub struct Profile {}
-
-  // todo
-  #[derive(Serialize, Deserialize, Debug, Clone)]
-  pub struct User {}
+  use crate::models::{profile::Profile, user::User};
 
   #[derive(Serialize, Deserialize, Debug, Clone)]
   pub struct LoginResp {

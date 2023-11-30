@@ -23,9 +23,18 @@ prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-
 anyhow = "*"
 tower-http = { version = "*", features = ["trace"] }
 thiserror = "*"
+uuid = { version = "*", features = ["v4", "fast-rng"] }
+base64 = "*"
+rsa = "*"
+sha1 = "*"
+sha2 = "*"
+idgenerator = "*"
+config = { version = "*", features = ["toml"] }
+better-panic = "*"
+color-backtrace = "*"
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 debug = false
 lto = true
 panic = "abort"
