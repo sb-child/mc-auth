@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::{prisma, utils};
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Properties {
   #[serde(rename = "name")]
@@ -22,4 +24,10 @@ pub struct Profile {
 
   #[serde(rename = "properties")]
   pub properties: Vec<Properties>,
+}
+
+impl Profile {
+  pub fn from_query(data: prisma::profile::Data) -> Self {
+    Self { id: utils::uuid_vec_to_string(data.uuid), name: data.display_name, properties: vec![] }
+  }
 }

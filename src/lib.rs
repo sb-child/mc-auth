@@ -3,3 +3,4 @@ pub mod models;
 #[allow(warnings, unused)]
 pub mod prisma;
 pub mod settings;
+pub mod utils;

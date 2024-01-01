@@ -2,6 +2,10 @@
 name = "mc-auth"
 version = "0.1.0"
 edition = "2021"
+default-run = "mc-auth"
+
+[workspace]
+members = [".", "prisma-cli"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,11 +18,9 @@ tracing-subscriber = { version = "*", features = [
 ] }
 axum = { version = "*", features = ["tracing"] }
 serde = { version = "*", features = ["derive"] }
-prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10", features = [
+prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", branch = "main", features = [
     "migrations",
-] }
-prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.10", features = [
-    "migrations",
+    "postgresql",
 ] }
 anyhow = "*"
 tower-http = { version = "*", features = ["trace"] }
@@ -32,6 +34,9 @@ idgenerator = "*"
 config = { version = "*", features = ["toml"] }
 better-panic = "*"
 color-backtrace = "*"
+rand = "*"
+chrono = "*"
+toml = "*"
 
 [profile.release]
 opt-level = 3

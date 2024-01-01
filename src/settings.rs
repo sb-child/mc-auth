@@ -17,11 +17,11 @@ fn default_skin_domains() -> Vec<String> {
 }
 
 fn default_homepage_link() -> String {
-  "".to_owned()
+  "https://github.com/sb-child/".to_owned()
 }
 
 fn default_register_link() -> String {
-  "".to_owned()
+  "https://github.com/sb-child/".to_owned()
 }
 
 fn default_pubkey() -> String {
@@ -30,6 +30,42 @@ fn default_pubkey() -> String {
 
 fn default_prikey() -> String {
   "".to_owned()
+}
+
+fn default_token_max() -> i64 {
+  10
+}
+
+fn default_token_refresh() -> i64 {
+  // 15 天
+  1296000
+}
+
+fn default_token_invalid() -> i64 {
+  // 5 天
+  432000
+}
+
+fn default_webserver_listen() -> String {
+  "127.0.0.1:2345".to_owned()
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct Token {
+  #[serde(rename = "max", default = "default_token_max")]
+  pub max: i64,
+
+  #[serde(rename = "refresh", default = "default_token_refresh")]
+  pub refresh_duration: i64,
+
+  #[serde(rename = "invalid", default = "default_token_invalid")]
+  pub invalid_duration: i64,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct WebServer {
+  #[serde(rename = "listen", default = "default_webserver_listen")]
+  pub listen: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -57,4 +93,10 @@ pub struct Settings {
 
   #[serde(rename = "prikey", default = "default_prikey")]
   pub prikey: String,
+
+  #[serde(rename = "token")]
+  pub token: Token,
+
+  #[serde(rename = "webserver")]
+  pub web_server: WebServer,
 }
