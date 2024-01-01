@@ -25,7 +25,18 @@ async fn main() -> anyhow::Result<()> {
   // color_backtrace::install();
   // better_panic::Settings::debug().most_recent_first(false).lineno_suffix(true).install();
 
-  tracing_subscriber::registry().with(tracing_subscriber::fmt::layer()).with(LevelFilter::INFO).init();
+  tracing_subscriber::registry()
+    .with(tracing_subscriber::fmt::layer())
+    // .with(LevelFilter::DEBUG)
+    .with(tracing_subscriber::filter::filter_fn(|metadata| {
+      // println!("{}", metadata.target());
+      (
+        (metadata.target().starts_with("tokio_postgres::") ||
+         metadata.target().starts_with("sql_schema_")) && metadata.level() <= &LevelFilter::WARN)
+        || (metadata.target().starts_with("mc_auth") && metadata.level() <= &LevelFilter::DEBUG)
+        || (metadata.target().starts_with("tower_http::") && metadata.level() <= &LevelFilter::DEBUG)
+    }))
+    .init();
 
   tracing::info!("色麦块认证服务器~");
 
@@ -33,11 +44,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(v) => v,
     Err(_e) => "".to_owned(),
   };
-  let settings: Settings = toml::from_str(&settings_str)?;
+  let mut settings: Settings = toml::from_str(&settings_str)?;
+  settings.signature = settings.signature.convert();
 
   let webserver_settings = settings.web_server.clone();
 
-  tracing::debug!("配置: {:?}", settings);
+  // tracing::debug!("配置: {:?}", settings);
 
   tracing::info!("正在连接数据库...");
   let db: Result<PrismaClient, NewClientError> = PrismaClient::_builder().build().await;
@@ -115,7 +127,7 @@ async fn index(State(state): State<AppState>) -> Json<meta_resp::GetMetadataResp
       links: meta_resp::MetaLinks { homepage: state.settings.homepage_link, register: state.settings.register_link },
     },
     skin_domains: state.settings.skin_domains,
-    signature_publickey: state.settings.pubkey,
+    signature_publickey: state.settings.signature.pubkey,
   })
 }
 
@@ -235,26 +247,14 @@ async fn login(
   tracing::debug!("请求: {:?}", req);
 
   let profiles = user.1.profile().unwrap();
-  let profiles = profiles
-    .iter()
-    .map(|x| {
-      profile::Profile {
-        id: utils::uuid_vec_to_string(x.uuid.clone()),
-        name: x.display_name.clone(),
-        properties: vec![],
-      }
-    })
-    .collect();
+  let profiles = profiles.iter().map(|x| profile::Profile::from_query(x.clone())).collect();
   let user_info = user::User { id: utils::uuid_vec_to_string(user.1.uuid), properties: vec![] };
   tracing::debug!("角色列表: {:?}", profiles);
   Ok(Json(login_resp::LoginResp {
     access_token,
     client_token,
     available_profiles: profiles,
-    selected_profile: user.0.map_or_else(
-      || None,
-      |x| Some(profile::Profile { id: utils::uuid_vec_to_string(x.uuid), name: x.display_name, properties: vec![] }),
-    ),
+    selected_profile: user.0.map_or_else(|| None, |x| Some(profile::Profile::from_query(x.clone()))),
     user: Some(user_info),
   }))
   // Json(login_resp::LoginResp {

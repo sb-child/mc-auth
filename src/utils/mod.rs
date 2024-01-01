@@ -76,7 +76,7 @@ pub async fn check_tokens(
     )
   });
   let results = cli._batch(results).await?;
-  let now = chrono::Local::now();
+  let now = chrono::Utc::now();
   for (_, (avaliable, need_refresh, settings)) in results.into_iter().enumerate() {
     let (max_tokens, token_need_refresh_duration, token_invalid_duration) = if let Some(item) = settings {
       (item.max_token, item.token_need_refresh_duration, item.token_invalid_duration)
@@ -129,4 +129,8 @@ pub async fn check_tokens(
     }
   }
   return Ok(());
+}
+
+pub fn texture_vec_to_string(x: Vec<u8>) -> String {
+  x.iter().map(|byte| format!("{:02x}", byte)).collect()
 }
