@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{prisma, settings::Settings, utils};
@@ -78,7 +79,29 @@ impl ProfileTextures {
   }
 
   pub fn with_settings(self: Self, sett: Settings) -> Self {
-    
-    self
+    let base_url = &sett.textures.base;
+    let skin = if let Some(ref skin) = self.textures.skin {
+      let mut skin = skin.clone();
+      skin.url = base_url.to_owned() + &skin.url;
+      Some(skin)
+    } else {
+      None
+    };
+    let cape = if let Some(ref cape) = self.textures.cape {
+      let mut cape = cape.clone();
+      cape.url = base_url.to_owned() + &cape.url;
+      Some(cape)
+    } else {
+      None
+    };
+    Self { textures: Textures { cape, skin }, ..self }
+  }
+
+  pub fn to_base64(self: Self) -> String {
+    let be = utils::base64();
+    be.encode(match self.serialize(serde_json::value::Serializer) {
+      Ok(v) => v.to_string(),
+      Err(_err) => "".to_owned(),
+    })
   }
 }

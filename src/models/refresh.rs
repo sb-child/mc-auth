@@ -1,31 +1,21 @@
 pub mod req {
   use serde::{Deserialize, Serialize};
 
-  #[derive(Serialize, Deserialize, Debug, Clone)]
-  pub struct Agent {
-    #[serde(rename = "name")]
-    pub name: Option<String>,
-
-    #[serde(rename = "version")]
-    pub version: Option<i32>,
-  }
+  use crate::models::profile::Profile;
 
   #[derive(Serialize, Deserialize, Debug, Clone)]
-  pub struct LoginReq {
-    #[serde(rename = "agent")]
-    pub agent: Option<Agent>,
+  pub struct RefreshReq {
+    #[serde(rename = "accessToken")]
+    pub access_token: String,
 
     #[serde(rename = "clientToken")]
     pub client_token: Option<String>,
 
-    #[serde(rename = "password")]
-    pub password: String,
-
     #[serde(rename = "requestUser")]
     pub request_user: Option<bool>,
 
-    #[serde(rename = "username")]
-    pub username: String,
+    #[serde(rename = "selectedProfile")]
+    pub selected_profile: Option<Profile>,
   }
 }
 
@@ -35,12 +25,9 @@ pub mod resp {
   use crate::models::{profile::Profile, user::User};
 
   #[derive(Serialize, Deserialize, Debug, Clone)]
-  pub struct LoginResp {
+  pub struct RefreshResp {
     #[serde(rename = "accessToken")]
     pub access_token: String,
-
-    #[serde(rename = "availableProfiles")]
-    pub available_profiles: Vec<Profile>,
 
     #[serde(rename = "clientToken")]
     pub client_token: String,
@@ -54,11 +41,11 @@ pub mod resp {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum LoginTransactionError {
+pub enum RefreshTransactionError {
   #[error("数据库错误: {0}")]
   QueryError(#[from] prisma_client_rust::QueryError),
-  #[error("用户不存在")]
-  InvalidUser,
+  #[error("令牌不存在")]
+  InvalidToken,
   #[error("密码不正确")]
   WrongPassword,
 }

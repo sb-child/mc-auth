@@ -23,6 +23,48 @@ pub fn uuid_vec_to_string(x: Vec<u8>) -> String {
   uuid::Uuid::from_slice(&x).unwrap().as_simple().to_string()
 }
 
+pub fn string_to_uuid_vec(x: String) -> Vec<u8> {
+  match uuid::Uuid::parse_str(&x) {
+    Ok(x) => x.as_bytes().to_vec(),
+    Err(_err) => {
+      vec![]
+    },
+  }
+}
+
+pub async fn get_token(
+  cli: PrismaClient,
+  access_token: String,
+  client_token: Option<String>,
+) -> Result<Option<prisma::token::Data>, prisma_client_rust::QueryError> {
+  match client_token {
+    Some(client_token) => {
+      cli
+        .token()
+        .find_first(vec![
+          prisma::token::WhereParam::AccessToken(prisma::read_filters::StringFilter::Equals(access_token)),
+          prisma::token::WhereParam::ClientToken(prisma::read_filters::StringFilter::Equals(client_token)),
+        ])
+        .with(prisma::token::owner::fetch())
+        .with(prisma::token::profile::fetch().with(prisma::profile::skin::fetch()).with(prisma::profile::cape::fetch()))
+    },
+    None => {
+      cli.token().find_first(vec![prisma::token::WhereParam::AccessToken(prisma::read_filters::StringFilter::Equals(
+        access_token,
+      ))])
+    },
+  }
+  .exec()
+  .await
+}
+
+pub async fn del_token(
+  cli: PrismaClient,
+  access_token: String,
+) -> Result<prisma::token::Data, prisma_client_rust::QueryError> {
+  cli.token().delete(prisma::token::UniqueWhereParam::AccessTokenEquals(access_token)).exec().await
+}
+
 pub async fn add_token(
   cli: PrismaClient,
   profile: Option<i64>,
@@ -48,33 +90,42 @@ pub async fn check_tokens(
   default_max_tokens: i64,
   default_token_need_refresh_duration: i64,
   default_token_invalid_duration: i64,
+  user_id: Vec<i64>,
 ) -> Result<(), prisma_client_rust::QueryError> {
-  let results = cli.user().find_many(vec![]).exec().await?.into_iter().map(|u| {
-    (
-      // 可用
-      cli
-        .token()
-        .find_many(vec![
-          prisma::token::status::equals(prisma::TokenStatus::Available),
-          prisma::token::owner::is(vec![prisma::user::WhereParam::Id(prisma::read_filters::BigIntFilter::Equals(
-            u.id,
-          ))]),
-        ])
-        .order_by(prisma::token::created_at::order(prisma::SortOrder::Desc)),
-      // 需要刷新
-      cli
-        .token()
-        .find_many(vec![
-          prisma::token::status::equals(prisma::TokenStatus::NeedRefresh),
-          prisma::token::owner::is(vec![prisma::user::WhereParam::Id(prisma::read_filters::BigIntFilter::Equals(
-            u.id,
-          ))]),
-        ])
-        .order_by(prisma::token::created_at::order(prisma::SortOrder::Desc)),
-      // 用户设置
-      cli.setting().find_unique(prisma::setting::UniqueWhereParam::UserIdEquals(u.id)),
+  let results = cli
+    .user()
+    .find_many(
+      user_id.iter().map(|x| prisma::user::WhereParam::Id(prisma::read_filters::BigIntFilter::Equals(*x))).collect(),
     )
-  });
+    .exec()
+    .await?
+    .into_iter()
+    .map(|u| {
+      (
+        // 可用
+        cli
+          .token()
+          .find_many(vec![
+            prisma::token::status::equals(prisma::TokenStatus::Available),
+            prisma::token::owner::is(vec![prisma::user::WhereParam::Id(prisma::read_filters::BigIntFilter::Equals(
+              u.id,
+            ))]),
+          ])
+          .order_by(prisma::token::created_at::order(prisma::SortOrder::Desc)),
+        // 需要刷新
+        cli
+          .token()
+          .find_many(vec![
+            prisma::token::status::equals(prisma::TokenStatus::NeedRefresh),
+            prisma::token::owner::is(vec![prisma::user::WhereParam::Id(prisma::read_filters::BigIntFilter::Equals(
+              u.id,
+            ))]),
+          ])
+          .order_by(prisma::token::created_at::order(prisma::SortOrder::Desc)),
+        // 用户设置
+        cli.setting().find_unique(prisma::setting::UniqueWhereParam::UserIdEquals(u.id)),
+      )
+    });
   let results = cli._batch(results).await?;
   let now = chrono::Utc::now();
   for (_, (avaliable, need_refresh, settings)) in results.into_iter().enumerate() {
@@ -133,4 +184,8 @@ pub async fn check_tokens(
 
 pub fn texture_vec_to_string(x: Vec<u8>) -> String {
   x.iter().map(|byte| format!("{:02x}", byte)).collect()
+}
+
+pub fn base64() -> base64::engine::general_purpose::GeneralPurpose {
+  base64::engine::GeneralPurpose::new(&base64::alphabet::STANDARD, base64::engine::GeneralPurposeConfig::new())
 }

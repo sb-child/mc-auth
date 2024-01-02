@@ -3,12 +3,7 @@ use std::sync::Arc;
 use axum::{extract::State, routing, Json, Router};
 use mc_auth::{
   app_state::AppState,
-  models::{
-    error,
-    login::{login_req, login_resp, LoginTransactionError},
-    meta::meta_resp,
-    profile, user,
-  },
+  models::{error, login as login_model, meta::meta_resp, profile, refresh as refresh_model, textures, user},
   prisma,
   settings::Settings,
   utils,
@@ -106,8 +101,32 @@ async fn main() -> anyhow::Result<()> {
   let state = AppState { db: Arc::new(db), settings };
 
   let app = Router::new()
+    // API 元数据获取
     .route("/", routing::get(index))
+    // 登录
     .route("/authserver/authenticate", routing::post(login))
+    // 刷新
+    .route("/authserver/refresh", routing::post(login))
+    // 验证令牌
+    .route("/authserver/validate", routing::post(login))
+    // 吊销令牌
+    .route("/authserver/invalidate", routing::post(login))
+    // 登出
+    .route("/authserver/signout", routing::post(login))
+    // 客户端进入服务器
+    .route("/sessionserver/session/minecraft/join", routing::post(login))
+    // 服务端验证客户端
+    .route("/sessionserver/session/minecraft/hasJoined", routing::get(login))
+    // 查询角色属性
+    .route("/sessionserver/session/minecraft/profile/:uuid", routing::get(login))
+    // 按名称批量查询角色
+    .route("/api/profiles/minecraft", routing::get(login))
+    // 上传材质
+    .route("/api/user/profile/:uuid/:textureType", routing::put(login))
+    // 清除材质
+    .route("/api/user/profile/:uuid/:textureType", routing::delete(login))
+    // 获取材质
+    .route("/textures/:hash", routing::get(login))
     .with_state(state)
     .layer(TraceLayer::new_for_http());
 
@@ -133,14 +152,14 @@ async fn index(State(state): State<AppState>) -> Json<meta_resp::GetMetadataResp
 
 async fn login(
   State(state): State<AppState>,
-  req: Json<login_req::LoginReq>,
-) -> Result<Json<login_resp::LoginResp>, error::ErrorResponse> {
+  req: Json<login_model::req::LoginReq>,
+) -> Result<Json<login_model::resp::LoginResp>, error::ErrorResponse> {
   let access_token = utils::gen_access_token();
   let client_token = req.client_token.clone().unwrap_or(utils::gen_uuid());
   let default_max_tokens = state.settings.token.max;
   let default_token_need_refresh_duration = state.settings.token.refresh_duration;
   let default_token_invalid_duration = state.settings.token.invalid_duration;
-  let user: Result<(Option<prisma::profile::Data>, prisma::user::Data), LoginTransactionError> = state
+  let user: Result<(Option<prisma::profile::Data>, prisma::user::Data), login_model::LoginTransactionError> = state
     .db
     ._transaction()
     .run(|cli| {
@@ -201,7 +220,7 @@ async fn login(
           },
         }
         // 如果找不到用户, 则返回错误
-        Err(LoginTransactionError::InvalidUser)
+        Err(login_model::LoginTransactionError::InvalidUser)
       }
     })
     .await;
@@ -214,7 +233,7 @@ async fn login(
     Err(e) => {
       tracing::debug!("登录失败: {:?}", e);
       match e {
-        LoginTransactionError::InvalidUser | LoginTransactionError::WrongPassword => {
+        login_model::LoginTransactionError::InvalidUser | login_model::LoginTransactionError::WrongPassword => {
           return Err(error::Error::new_invalid_credentials().to_response());
         },
         _ => {
@@ -234,6 +253,7 @@ async fn login(
           default_max_tokens,
           default_token_need_refresh_duration,
           default_token_invalid_duration,
+          vec![user.1.id],
         )
         .await
       }
@@ -241,36 +261,96 @@ async fn login(
     .await;
 
   if let Err(e) = check_tokens_result {
+    tracing::debug!("刷新令牌失败: {:?}", e);
     return Err(error::Error::new_database_error().to_response());
   }
 
   tracing::debug!("请求: {:?}", req);
 
   let profiles = user.1.profile().unwrap();
-  let profiles = profiles.iter().map(|x| profile::Profile::from_query(x.clone())).collect();
+  let profiles = profiles
+    .iter()
+    .map(|x| {
+      profile::Profile::from_query(x.clone())
+        .with_textures(textures::ProfileTextures::from_query(x.clone()).with_settings(state.settings.clone()))
+        .with_settings(state.settings.clone())
+    })
+    .collect();
   let user_info = user::User { id: utils::uuid_vec_to_string(user.1.uuid), properties: vec![] };
   tracing::debug!("角色列表: {:?}", profiles);
-  Ok(Json(login_resp::LoginResp {
+  Ok(Json(login_model::resp::LoginResp {
     access_token,
     client_token,
     available_profiles: profiles,
-    selected_profile: user.0.map_or_else(|| None, |x| Some(profile::Profile::from_query(x.clone()))),
+    selected_profile: user.0.map_or_else(
+      || None,
+      |x| {
+        Some(
+          profile::Profile::from_query(x.clone())
+            .with_textures(textures::ProfileTextures::from_query(x.clone()).with_settings(state.settings.clone()))
+            .with_settings(state.settings.clone()),
+        )
+      },
+    ),
     user: Some(user_info),
   }))
-  // Json(login_resp::LoginResp {
-  //   access_token,
-  //   available_profiles: vec![profile::Profile {
-  //     id: "67f0d17981804a03ad851dbd6bbd4eb8".to_owned(),
-  //     name: "涩妹妹".to_owned(),
-  //     properties: vec![],
-  //   }],
-  //   client_token,
-  //   selected_profile: Some(profile::Profile {
-  //     id: "67f0d17981804a03ad851dbd6bbd4eb8".to_owned(),
-  //     name: "涩妹妹".to_owned(),
-  //     properties: vec![],
-  //   }),
-  //   user: None,
-  // })
-  // Err(error::Error::new_invalid_credentials().to_response())
+}
+
+async fn refresh(
+  State(state): State<AppState>,
+  req: Json<refresh_model::req::RefreshReq>,
+) -> Result<Json<refresh_model::resp::RefreshResp>, error::ErrorResponse> {
+  let access_token = req.access_token.clone();
+  let client_token = req.client_token.clone();
+  let selected_profile = match req.selected_profile {
+    Some(x) => Some(utils::string_to_uuid_vec(x.id)),
+    None => None,
+  };
+  let default_max_tokens = state.settings.token.max;
+  let default_token_need_refresh_duration = state.settings.token.refresh_duration;
+  let default_token_invalid_duration = state.settings.token.invalid_duration;
+  let data: Result<(Option<prisma::profile::Data>, prisma::user::Data), refresh_model::RefreshTransactionError> = state
+    .db
+    ._transaction()
+    .run(|cli| {
+      let access_token = access_token.clone();
+      let client_token = client_token.clone();
+      let selected_profile = selected_profile.clone();
+      async move {
+        let token = utils::get_token(cli, access_token, client_token).await?;
+        let (user, profile) = match token {
+          Some(x) => (*x.owner().unwrap(), x.profile().unwrap()),
+          None => {
+            return Err(refresh_model::RefreshTransactionError::InvalidToken);
+          },
+        };
+        let s_profile = match selected_profile {
+          Some(x) => {
+            let p = cli
+              .profile()
+              .find_unique(prisma::profile::UniqueWhereParam::UuidEquals(x))
+              .with(prisma::profile::skin::fetch())
+              .with(prisma::profile::cape::fetch())
+              .exec()
+              .await;
+            match p {
+              Ok(Some(pd)) => Some(pd),
+              Ok(None) => None,
+              Err(err) => {
+                return Err(refresh_model::RefreshTransactionError::QueryError(err));
+              },
+            }
+          },
+          None => None,
+        };
+        let profile = match s_profile {
+          Some(x) => Some(x),
+          None => profile.cloned(),
+        };
+        Ok((profile, user))
+      }
+    })
+    .await;
+
+  Ok(())
 }

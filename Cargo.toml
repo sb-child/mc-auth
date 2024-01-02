@@ -18,6 +18,7 @@ tracing-subscriber = { version = "*", features = [
 ] }
 axum = { version = "*", features = ["tracing"] }
 serde = { version = "*", features = ["derive"] }
+serde_json = "*"
 prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", branch = "main", features = [
     "migrations",
     "postgresql",
@@ -27,8 +28,8 @@ tower-http = { version = "*", features = ["trace"] }
 thiserror = "*"
 uuid = { version = "*", features = ["v4", "fast-rng"] }
 base64 = "*"
-rsa = "*"
-sha1 = "*"
+rsa = { version = "*" }
+sha1 = { version = "*", features = ["oid"] }
 sha2 = "*"
 idgenerator = "*"
 config = { version = "*", features = ["toml"] }
@@ -44,3 +45,6 @@ debug = false
 lto = true
 panic = "abort"
 codegen-units = 1
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
