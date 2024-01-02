@@ -309,7 +309,10 @@ async fn refresh(
   let default_max_tokens = state.settings.token.max;
   let default_token_need_refresh_duration = state.settings.token.refresh_duration;
   let default_token_invalid_duration = state.settings.token.invalid_duration;
-  let data: Result<(Option<prisma::profile::Data>, prisma::user::Data), refresh_model::RefreshTransactionError> = state
+  let data: Result<
+    (Option<prisma::profile::Data>, prisma::user::Data, String, String),
+    refresh_model::RefreshTransactionError,
+  > = state
     .db
     ._transaction()
     .run(|cli| {
@@ -344,10 +347,24 @@ async fn refresh(
           None => None,
         };
         let profile = match s_profile {
-          Some(x) => Some(x),
+          Some(x) => {
+            match profile {
+              Some(_y) => {
+                return Err(refresh_model::RefreshTransactionError::ReassignProfile);
+              },
+              None => Some(x),
+            }
+          },
           None => profile.cloned(),
         };
-        Ok((profile, user))
+        let client_token = match client_token {
+          Some(x) => x,
+          None => {
+            
+          },
+        }
+        utils::add_token(cli, profile, user.id, access_token, client_token);
+        Ok((profile, user, "".to_owned(), "".to_owned()))
       }
     })
     .await;

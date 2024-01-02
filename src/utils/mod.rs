@@ -44,14 +44,16 @@ pub async fn get_token(
         .find_first(vec![
           prisma::token::WhereParam::AccessToken(prisma::read_filters::StringFilter::Equals(access_token)),
           prisma::token::WhereParam::ClientToken(prisma::read_filters::StringFilter::Equals(client_token)),
+          prisma::token::WhereParam::Status(prisma::read_filters::TokenStatusFilter::Not(prisma::TokenStatus::Invalid)),
         ])
         .with(prisma::token::owner::fetch())
         .with(prisma::token::profile::fetch().with(prisma::profile::skin::fetch()).with(prisma::profile::cape::fetch()))
     },
     None => {
-      cli.token().find_first(vec![prisma::token::WhereParam::AccessToken(prisma::read_filters::StringFilter::Equals(
-        access_token,
-      ))])
+      cli.token().find_first(vec![
+        prisma::token::WhereParam::AccessToken(prisma::read_filters::StringFilter::Equals(access_token)),
+        prisma::token::WhereParam::Status(prisma::read_filters::TokenStatusFilter::Not(prisma::TokenStatus::Invalid)),
+      ])
     },
   }
   .exec()
@@ -62,7 +64,13 @@ pub async fn del_token(
   cli: PrismaClient,
   access_token: String,
 ) -> Result<prisma::token::Data, prisma_client_rust::QueryError> {
-  cli.token().delete(prisma::token::UniqueWhereParam::AccessTokenEquals(access_token)).exec().await
+  cli
+    .token()
+    .update(prisma::token::UniqueWhereParam::AccessTokenEquals(access_token), vec![prisma::token::SetParam::Status(
+      prisma::write_params::TokenStatusParam::Set(prisma::TokenStatus::Invalid),
+    )])
+    .exec()
+    .await
 }
 
 pub async fn add_token(

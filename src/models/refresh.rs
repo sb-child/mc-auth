@@ -46,6 +46,6 @@ pub enum RefreshTransactionError {
   QueryError(#[from] prisma_client_rust::QueryError),
   #[error("令牌不存在")]
   InvalidToken,
-  #[error("密码不正确")]
-  WrongPassword,
+  #[error("角色被重新绑定")]
+  ReassignProfile,
 }
