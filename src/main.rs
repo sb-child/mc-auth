@@ -3,7 +3,13 @@ use std::sync::Arc;
 use axum::{extract::State, routing, Json, Router};
 use mc_auth::{
   app_state::AppState,
-  models::{error, login as login_model, meta::meta_resp, profile, refresh as refresh_model, textures, user},
+  models::{
+    error, login as login_model,
+    meta::meta_resp,
+    profile::{self, Profile},
+    refresh as refresh_model, textures,
+    user::{self, User},
+  },
   prisma,
   settings::Settings,
   utils,
@@ -156,6 +162,10 @@ async fn login(
 ) -> Result<Json<login_model::resp::LoginResp>, error::ErrorResponse> {
   let access_token = utils::gen_access_token();
   let client_token = req.client_token.clone().unwrap_or(utils::gen_uuid());
+  let request_user = match req.request_user {
+    Some(x) => x,
+    None => false,
+  };
   let default_max_tokens = state.settings.token.max;
   let default_token_need_refresh_duration = state.settings.token.refresh_duration;
   let default_token_invalid_duration = state.settings.token.invalid_duration;
@@ -292,7 +302,7 @@ async fn login(
         )
       },
     ),
-    user: Some(user_info),
+    user: request_user.then(|| user_info),
   }))
 }
 
@@ -302,6 +312,10 @@ async fn refresh(
 ) -> Result<Json<refresh_model::resp::RefreshResp>, error::ErrorResponse> {
   let access_token = req.access_token.clone();
   let client_token = req.client_token.clone();
+  let request_user = match req.request_user {
+    Some(x) => x,
+    None => false,
+  };
   let selected_profile = match req.selected_profile {
     Some(x) => Some(utils::string_to_uuid_vec(x.id)),
     None => None,
@@ -321,8 +335,29 @@ async fn refresh(
       let selected_profile = selected_profile.clone();
       async move {
         let token = utils::get_token(cli, access_token, client_token).await?;
-        let (user, profile) = match token {
-          Some(x) => (*x.owner().unwrap(), x.profile().unwrap()),
+        let (user, profile, token_client_token) = match token {
+          Some(x) => (*x.owner().unwrap(), x.profile().unwrap(), x.client_token),
+          None => {
+            return Err(refresh_model::RefreshTransactionError::InvalidToken);
+          },
+        };
+        match utils::check_tokens(
+          cli,
+          default_max_tokens,
+          default_token_need_refresh_duration,
+          default_token_invalid_duration,
+          vec![user.id],
+        )
+        .await
+        {
+          Ok(_) => {},
+          Err(err) => {
+            return Err(refresh_model::RefreshTransactionError::QueryError(err));
+          },
+        };
+        let token = utils::get_token(cli, access_token, client_token).await?;
+        let (user, profile, token_client_token) = match token {
+          Some(x) => (*x.owner().unwrap(), x.profile().unwrap(), x.client_token),
           None => {
             return Err(refresh_model::RefreshTransactionError::InvalidToken);
           },
@@ -359,15 +394,58 @@ async fn refresh(
         };
         let client_token = match client_token {
           Some(x) => x,
-          None => {
-            
+          None => token_client_token,
+        };
+        let add_token_result = utils::add_token(
+          cli,
+          match profile {
+            Some(x) => Some(x.id),
+            None => None,
           },
-        }
-        utils::add_token(cli, profile, user.id, access_token, client_token);
-        Ok((profile, user, "".to_owned(), "".to_owned()))
+          user.id,
+          access_token,
+          client_token,
+        )
+        .await;
+        match add_token_result {
+          Ok(_) => {},
+          Err(err) => {
+            return Err(refresh_model::RefreshTransactionError::QueryError(err));
+          },
+        };
+        Ok((profile, user, access_token, client_token))
       }
     })
     .await;
-
-  Ok(())
+  let (profile, user, access_token, client_token) = match data {
+    Ok(x) => (x.0, x.1, x.2, x.3),
+    Err(err) => {
+      match err {
+        refresh_model::RefreshTransactionError::QueryError(err) => {
+          return Err(error::Error::new_database_error().to_response());
+        },
+        refresh_model::RefreshTransactionError::InvalidToken => {
+          return Err(error::Error::new_invalid_token().to_response());
+        },
+        refresh_model::RefreshTransactionError::ReassignProfile => {
+          return Err(error::Error::new_reassign_profile().to_response());
+        },
+      }
+    },
+  };
+  Ok(Json(refresh_model::resp::RefreshResp {
+    access_token,
+    client_token,
+    selected_profile: match profile {
+      Some(x) => {
+        Some(
+          Profile::from_query(x.clone())
+            .with_textures(textures::ProfileTextures::from_query(x).with_settings(state.settings.clone()))
+            .with_settings(state.settings),
+        )
+      },
+      None => None,
+    },
+    user: request_user.then(|| User { id: utils::uuid_vec_to_string(user.uuid), properties: vec![] }),
+  }))
 }
