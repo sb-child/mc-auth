@@ -33,7 +33,7 @@ pub fn string_to_uuid_vec(x: String) -> Vec<u8> {
 }
 
 pub async fn get_token(
-  cli: PrismaClient,
+  cli: &PrismaClient,
   access_token: String,
   client_token: Option<String>,
 ) -> Result<Option<prisma::token::Data>, prisma_client_rust::QueryError> {
@@ -61,7 +61,7 @@ pub async fn get_token(
 }
 
 pub async fn del_token(
-  cli: PrismaClient,
+  cli: &PrismaClient,
   access_token: String,
 ) -> Result<prisma::token::Data, prisma_client_rust::QueryError> {
   cli
@@ -74,7 +74,7 @@ pub async fn del_token(
 }
 
 pub async fn add_token(
-  cli: PrismaClient,
+  cli: &PrismaClient,
   profile: Option<i64>,
   user: i64,
   access_token: String,
@@ -94,7 +94,7 @@ pub async fn add_token(
 }
 
 pub async fn check_tokens(
-  cli: PrismaClient,
+  cli: &PrismaClient,
   default_max_tokens: i64,
   default_token_need_refresh_duration: i64,
   default_token_invalid_duration: i64,

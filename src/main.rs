@@ -204,7 +204,7 @@ async fn login(
                 .exec()
                 .await?
                 .unwrap();
-              utils::add_token(cli, Some(profile.id), user.id, access_token, client_token).await?;
+              utils::add_token(&cli, Some(profile.id), user.id, access_token, client_token).await?;
               return Ok((Some(profile), user));
             }
           },
@@ -224,7 +224,7 @@ async fn login(
               .exec()
               .await?;
             if let Some(user) = user_match_email {
-              utils::add_token(cli, None, user.id, access_token, client_token).await?;
+              utils::add_token(&cli, None, user.id, access_token, client_token).await?;
               return Ok((None, user));
             }
           },
@@ -259,7 +259,7 @@ async fn login(
     .run(|cli| {
       async move {
         utils::check_tokens(
-          cli,
+          &cli,
           default_max_tokens,
           default_token_need_refresh_duration,
           default_token_invalid_duration,
@@ -316,8 +316,8 @@ async fn refresh(
     Some(x) => x,
     None => false,
   };
-  let selected_profile = match req.selected_profile {
-    Some(x) => Some(utils::string_to_uuid_vec(x.id)),
+  let selected_profile = match &req.selected_profile {
+    Some(x) => Some(utils::string_to_uuid_vec(x.id.clone())),
     None => None,
   };
   let default_max_tokens = state.settings.token.max;
@@ -334,15 +334,15 @@ async fn refresh(
       let client_token = client_token.clone();
       let selected_profile = selected_profile.clone();
       async move {
-        let token = utils::get_token(cli, access_token, client_token).await?;
-        let (user, profile, token_client_token) = match token {
-          Some(x) => (*x.owner().unwrap(), x.profile().unwrap(), x.client_token),
+        let token = utils::get_token(&cli, access_token.clone(), client_token.clone()).await?;
+        let user = match token {
+          Some(x) => x.owner().unwrap().clone(),
           None => {
             return Err(refresh_model::RefreshTransactionError::InvalidToken);
           },
         };
         match utils::check_tokens(
-          cli,
+          &cli,
           default_max_tokens,
           default_token_need_refresh_duration,
           default_token_invalid_duration,
@@ -355,9 +355,14 @@ async fn refresh(
             return Err(refresh_model::RefreshTransactionError::QueryError(err));
           },
         };
-        let token = utils::get_token(cli, access_token, client_token).await?;
+        let token = utils::get_token(&cli, access_token.clone(), client_token.clone()).await?;
         let (user, profile, token_client_token) = match token {
-          Some(x) => (*x.owner().unwrap(), x.profile().unwrap(), x.client_token),
+          Some(x) => {
+            let o = x.owner().unwrap().clone();
+            let p = x.profile().unwrap().clone();
+            let t = x.client_token.clone();
+            (o, p, t)
+          },
           None => {
             return Err(refresh_model::RefreshTransactionError::InvalidToken);
           },
@@ -397,14 +402,14 @@ async fn refresh(
           None => token_client_token,
         };
         let add_token_result = utils::add_token(
-          cli,
+          &cli,
           match profile {
-            Some(x) => Some(x.id),
+            Some(ref x) => Some(x.id),
             None => None,
           },
           user.id,
-          access_token,
-          client_token,
+          access_token.clone(),
+          client_token.clone(),
         )
         .await;
         match add_token_result {
@@ -421,7 +426,7 @@ async fn refresh(
     Ok(x) => (x.0, x.1, x.2, x.3),
     Err(err) => {
       match err {
-        refresh_model::RefreshTransactionError::QueryError(err) => {
+        refresh_model::RefreshTransactionError::QueryError(_err) => {
           return Err(error::Error::new_database_error().to_response());
         },
         refresh_model::RefreshTransactionError::InvalidToken => {

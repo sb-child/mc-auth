@@ -19,7 +19,7 @@ tracing-subscriber = { version = "*", features = [
 axum = { version = "*", features = ["tracing"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
-prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", branch = "main", features = [
+prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", rev = "a643effbd978deb0de8b2d637069aaa124d0332f", features = [
     "migrations",
     "postgresql",
 ] }
@@ -38,6 +38,7 @@ color-backtrace = "*"
 rand = "*"
 chrono = "*"
 toml = "*"
+tokio-postgres = "0.7.10"
 
 [profile.release]
 opt-level = 3
@@ -48,3 +49,6 @@ codegen-units = 1
 
 [profile.dev.package.num-bigint-dig]
 opt-level = 3
+
+[patch.'https://crates.io/crates/tokio-postgres']
+tokio-postgres = "0.7.10"

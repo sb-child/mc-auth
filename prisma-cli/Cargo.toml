@@ -5,8 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# branch = "main", 
+
 [dependencies]
-prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", branch = "main", features = [
+prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-rust", rev = "a643effbd978deb0de8b2d637069aaa124d0332f", features = [
     "migrations",
     "postgresql",
 ] }
+tokio-postgres = "0.7.10"
+
+[patch.'https://crates.io/crates/tokio-postgres']
+tokio-postgres = "0.7.10"
